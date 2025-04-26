@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Traceability Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .loading {
+            display: none;
+            color: #007bff;
+            margin-left: 10px;
+        }
+        .error {
+            display: none;
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 12px;
+            border-radius: 4px;
+            margin-top: 20px;
+            border: 1px solid #f5c6cb;
+        }
+        .results {
+            margin-top: 30px;
+            display: none;
+        }
+        .results h2 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th {
+            background-color: #007bff;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .depth-indicator {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            color: #666;
+            font-weight: bold;
+        }
+        .customer {
+            color: #28a745;
+            font-weight: bold;
+        }
+        .no-results {
+            color: #666;
+            font-style: italic;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Supply Chain Traceability Demo</h1>
+        <p class="subtitle">Enter a lot ID to trace all affected downstream batches and customers</p>
+        
+        <div class="input-group">
+            <label for="lotId">Lot ID:</label>
+            <input type="text" id="lotId" placeholder="e.g., RAW-LOT-001" value="RAW-LOT-001">
+        </div>
+        
+        <div>
+            <button id="traceButton" onclick="performTrace()">Trace Forward</button>
+            <span class="loading" id="loading">Loading...</span>
+        </div>
+        
+        <div class="error" id="error"></div>
+        
+        <div class="results" id="results">
+            <h2>Trace Results</h2>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        function performTrace() {
+            const lotId = document.getElementById('lotId').value.trim();
+            const traceButton = document.getElementById('traceButton');
+            const loading = document.getElementById('loading');
+            const error = document.getElementById('error');
+            const results = document.getElementById('results');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            // Validation
+            if (!lotId) {
+                showError('Please enter a lot ID');
+                return;
+            }
+            
+            // Reset UI
+            error.style.display = 'none';
+            results.style.display = 'none';
+            traceButton.disabled = true;
+            loading.style.display = 'inline';
+            
+            // Make API call
+            fetch(`/trace/forward/${encodeURIComponent(lotId)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || `HTTP ${response.status}`);
+                        });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    displayResults(data);
+                    loading.style.display = 'none';
+                    traceButton.disabled = false;
+                })
+                .catch(err => {
+                    showError(err.message || 'An error occurred while tracing');
+                    loading.style.display = 'none';
+                    traceButton.disabled = false;
+                });
+        }
+        
+        function showError(message) {
+            const error = document.getElementById('error');
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+        
+        function displayResults(data) {
+            const results = document.getElementById('results');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            if (!data.affected || data.affected.length === 0) {
+                resultsContent.innerHTML = '<div class="no-results">No downstream lots found for ' + data.source_lot + '</div>';
+                results.style.display = 'block';
+                return;
+            }
+            
+            // Create table
+            let html = '<table>';
+            html += '<thead><tr><th>Lot</th><th>Event</th><th>Customer</th><th>Depth</th></tr></thead>';
+            html += '<tbody>';
+            
+            data.affected.forEach(item => {
+                html += '<tr>';
+                html += '<td><span class="depth-indicator">' + '→'.repeat(item.depth) + '</span> ' + item.lot + '</td>';
+                html += '<td>' + item.event + '</td>';
+                html += '<td>' + (item.customer ? '<span class="customer">' + item.customer + '</span>' : '–') + '</td>';
+                html += '<td>' + item.depth + '</td>';
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            resultsContent.innerHTML = html;
+            results.style.display = 'block';
+        }
+        
+        // Allow Enter key to trigger trace
+        document.getElementById('lotId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                performTrace();
+            }
+        });
+    </script>
+</body>
+</html>
