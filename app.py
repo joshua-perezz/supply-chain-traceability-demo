@@ -6,6 +6,8 @@ This is the main application file that provides:
 - API endpoint at GET /trace/forward/<lot_id>
 """
 
+import utils.transport
+import utils.session
 import os
 from flask import Flask, render_template, jsonify, request
 from data import initialize_scenario
